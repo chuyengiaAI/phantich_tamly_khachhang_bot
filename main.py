@@ -1,5 +1,7 @@
 import os
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -20,6 +22,23 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """Handler cho Render Health Check (Port scan)."""
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK - Bot is running")
+
+    def log_message(self, format, *args):
+        pass  # Tắt log HTTP của health check để đỡ rác log
+
+def start_health_check_server():
+    """Chạy HTTP server ngầm để Render xác nhận Port 200 OK."""
+    port = int(os.getenv("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    logger.info(f"Khởi chạy Health Check HTTP Server trên cổng {port}...")
+    server.serve_forever()
 
 # Nạp biến môi trường
 load_dotenv()
@@ -173,6 +192,9 @@ def main():
     if not TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN == "your_telegram_bot_token_here":
         print("❌ LỖI: Chưa thiết lập TELEGRAM_BOT_TOKEN!")
         return
+
+    # Khởi chạy HTTP Server cho Render Health Check ngầm
+    threading.Thread(target=start_health_check_server, daemon=True).start()
 
     # Nạp dữ liệu ban đầu
     get_system_instruction()
